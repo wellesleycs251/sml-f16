@@ -69,7 +69,7 @@ structure PostFix = struct
     | relopToFun Eq = op=
     | relopToFun Gt = op>
 
-  and boolToInt false = 0
+ and boolToInt false = 0
     | boolToInt true = 1
 
   (************************************************************
@@ -98,6 +98,8 @@ structure PostFix = struct
     | sexpToCmd (Sexp.Sym "lt") = Relop Lt
     | sexpToCmd (Sexp.Sym "eq") = Relop Eq
     | sexpToCmd (Sexp.Sym "gt") = Relop Gt
+    | sexpToCmd sexp = raise SyntaxError ("unknown command "
+					  ^ (Sexp.sexpToString sexp))
 
   and stringToCmd s = sexpToCmd (Sexp.stringToSexp s)
   and stringToPgm s = sexpToPgm (Sexp.stringToSexp s)
@@ -173,6 +175,7 @@ fun testRun' pgmSexpString argsSexpString =
 	    (sexpStringToIntList argsSexpString)
     handle SexpError (msg, sexp) => ("SexpError: " ^ msg ^ " " ^ (Sexp.sexpToString sexp))
          | Sexp.IllFormedSexp msg => ("SexpError: Ill-formed sexp " ^ msg)
+         | SyntaxError msg => ("SyntaxError: " ^ msg)
          | other => "Unknown exception: " ^ (exnMessage other)
 
 and sexpStringToIntList str =

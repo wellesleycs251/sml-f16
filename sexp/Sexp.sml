@@ -417,11 +417,13 @@ datatype sexp = Int of int
     | (STRING(s)::ts) => (Str(s), ts)
     | (CHAR(c)::ts) => (Chr(c), ts)
     | (ATOM(s)::ts) =>
-      (case Int.fromString s of
-	   SOME i => (Int i, ts)
-	 | NONE => (case Real.fromString s of
-			SOME f => (Flt(f), ts)
-		     | NONE => (Sym(s), ts)))
+      if String.isSubstring "." s
+      then (case Real.fromString s of
+		SOME f => (Flt(f), ts)
+	      | NONE => (Sym(s), ts))
+      else (case Int.fromString s of
+		SOME i => (Int i, ts)
+	      | NONE => (Sym(s), ts))
     | (LPAREN::ts) =>  
        (case fromToksList ts of
             (sexps,ts') => (Seq(sexps), ts'))
