@@ -1,4 +1,5 @@
 (***************************************************************
+ Simprex adds simprec to Sigmex
  Sigmex adds sigma to Bindex
  Bindex adds names to Intex:
  + number of program args is replaced by a list of formal param names;
@@ -8,11 +9,11 @@
  Still, there is only one kind of value manipulated by the language: integers. 
 ****************************************************************)
 
+use "../sexp/Sexp.sml";
 use "../utils/Utils.sml";
-use "../utils/Sexp.sml";
 use "../utils/StringSet.sml";
 
-structure Sigmex = struct
+structure Simprex = struct
 
   open Sexp			      
 
@@ -20,12 +21,15 @@ structure Sigmex = struct
    Abstract Syntax
    ************************************************************)
   type var = string
-  datatype pgm = Sigmex of var list * exp (* param names, body *)
+  datatype pgm = Simprex of var list * exp (* param names, body *)
        and exp = Int of int (* integer literal with value *)
 	       | Var of var (* variable reference *)
 	       | BinApp of binop * exp * exp (* binary operator application with rator, rands *)
 	       | Bind of var * exp * exp (* bind name to value of defn in body *)
-               | Sigma of var * exp * exp * exp (* E_lo, E_hi, E_body *)					 
+               | Sigma of var * exp * exp * exp (* E_lo, E_hi, E_body *)
+               | Simprec of exp * var * var * exp * exp
+                            (* zero-exp * num-var * ans-var * comb-exp * arg-exp *)
+						
        and binop = Add | Sub | Mul | Div | Rem (* binary arithmetic ops *)
 
   exception SyntaxError of string
@@ -41,12 +45,12 @@ structure Sigmex = struct
 					     ^ (sexpToString sexp)))
 
   (* val sexpToPgm : Sexp.sexp -> pgm *)
-  fun sexpToPgm (Seq [Sym "sigmex", Seq formals, body]) =
-      Sigmex(map symToString formals, sexpToExp body)
+  fun sexpToPgm (Seq [Sym "simprex", Seq formals, body]) =
+      Simprex(map symToString formals, sexpToExp body)
     | sexpToPgm (Seq [Sym "intex", Sexp.Int n, body]) = 
-      Sigmex(map (fn i => "$" ^ (Int.toString i)) (Utils.range 1 (n+1)), 
+      Simprex(map (fn i => "$" ^ (Int.toString i)) (Utils.range 1 (n+1)), 
 		 sexpToExp body)
-    | sexpToPgm sexp = raise (SyntaxError ("invalid Sigmex program: "
+    | sexpToPgm sexp = raise (SyntaxError ("invalid Simprex program: "
 					   ^ (sexpToString sexp)))
 
   (* val sexpToExp : Sexp.sexp -> exp *)
@@ -60,7 +64,8 @@ structure Sigmex = struct
       Bind (name, sexpToExp defnx, sexpToExp bodyx)
     | sexpToExp (Seq [Sym "sigma", Sym name, lox, hix, bodyx]) =
       Sigma(name, sexpToExp lox, sexpToExp hix, sexpToExp bodyx)
-    | sexpToExp sexp = raise (SyntaxError ("invalid Sigmex expression: "  
+    (* Add a clause here for parsing simprec expressions *)
+    | sexpToExp sexp = raise (SyntaxError ("invalid Simprex expression: "  
 					   ^ (sexpToString sexp)))
 
   (* val stringToBinop : string -> binop *)
@@ -69,7 +74,7 @@ structure Sigmex = struct
     | stringToBinop "*" = Mul
     | stringToBinop "/" = Div
     | stringToBinop "%" = Rem
-    | stringToBinop s = raise (SyntaxError ("invalid Sigmex primop: " ^ s))
+    | stringToBinop s = raise (SyntaxError ("invalid Simprex primop: " ^ s))
 
   (* val stringToExp : string -> exp *)
   and stringToExp s = sexpToExp (stringToSexp s) (* Desugar when possible *)
@@ -85,8 +90,8 @@ structure Sigmex = struct
    ************************************************************)
 
   (* val pgmToSexp : pgm -> Sexp.sexp *)
-  fun pgmToSexp (Sigmex(fmls, body)) = 
-    Seq [Sym "sigmex", Seq(map (fn s => Sym s) fmls), expToSexp body]
+  fun pgmToSexp (Simprex(fmls, body)) = 
+    Seq [Sym "simprex", Seq(map (fn s => Sym s) fmls), expToSexp body]
 
   (* val expToSexp : exp -> Sexp.sexp *)
   and expToSexp (Int i) = Sexp.Int i
@@ -97,6 +102,8 @@ structure Sigmex = struct
       Seq [Sym "bind", Sym name, expToSexp defn, expToSexp body]
     | expToSexp (Sigma(name, lo, hi, body))  =
       Seq [Sym "sigma", Sym name, expToSexp lo, expToSexp hi, expToSexp body]
+    (* Replace the following stub unparsing simprec expressions *)	  
+    | expToSexp putSimprecPatternHere = Sym "put simprec clause here"
 
   (* val binopToString : binop -> string *)
   and binopToString Add = "+"
@@ -122,7 +129,7 @@ structure Sigmex = struct
 
   (* val freeVarsPgm : pgm -> S.t *)
   (* Returns the free variables of a program *)
-  fun freeVarsPgm (Sigmex(fmls,body)) =
+  fun freeVarsPgm (Simprex(fmls,body)) =
     S.difference (freeVarsExp body) (S.fromList fmls)
 	       
   (* val freeVarsExp : exp -> S.t *)
@@ -138,6 +145,8 @@ structure Sigmex = struct
       S.union (freeVarsExp lo)
 	      (S.union (freeVarsExp hi)
 		       (S.difference (freeVarsExp body) (S.singleton name)))
+    (* Replace the following stub for the free vars of simprec expressions *)	  	      
+    | freeVarsExp putSimprecPatternHere = S.empty 
 
   (* val freeVarsExps : exp list -> S.t *)
   (* Returns the free variables of a list of expressions *)
@@ -148,7 +157,42 @@ structure Sigmex = struct
   (* val varCheck : pgm -> bool *)
   and varCheck pgm = S.isEmpty (freeVarsPgm pgm)
 
+  (* Simple freeVars testing *)			       
+  fun freeVarsPgmString str = S.toList (freeVarsPgm (stringToPgm str))
+  fun freeVarsExpString str = S.toList (freeVarsExp (stringToExp str))
+  fun freeVarsPgmFile str = S.toList (freeVarsPgm (fileToPgm str))
+
+				       (* Testing of free vars of simprex expressions from strings *)
+  fun testFreeVars (simprexExpString, expectedList) =
+    let	val simprexExp = stringToExp simprexExpString
+	val _ = print ("Testing free vars of\n" ^ (expToString simprexExp) ^ ":\n")
+	val actualList = S.toList(freeVarsExp(simprexExp))
+	fun stringListToString stringList = "[" ^ (String.concatWith "," stringList) ^ "]"
+    in if actualList = expectedList
+       then print ("freeVarsExp returned expected result "
+		   ^ (stringListToString expectedList) ^ "\n\n")
+	     else print ("*** FREE VARS ERROR **"
+			 ^ "\n  Expected result: " ^ (stringListToString expectedList)
+			 ^ "\n  Actual result: " ^ (stringListToString actualList)
+			 ^ "\n\n")
+    end
+
+(* (* Uncomment this section to test your changes to 
+      sexpToExp, expToSexp, and freeVarsExp *)
+	
+  (* Evaluation tests *)
+  val tests =       
+      List.app testFreeVars
+               [("(simprec a (b c (+ b (/ c d))) e)", ["a", "d", "e"]), 
+		("(simprec (- b c) (n a (+ (/ n d) (% a e))) (+ f g))",
+		 ["b", "c", "d", "e", "f", "g"]),
+		("(simprec (- a b) (a e (+ (/ a c) (% e d))) (+ e f))",
+		 ["a", "b", "c", "d", "e", "f"]),
+		("(simprec (simprec a (b c (+ b (/ c d))) e) (f g (simprec (- f j) (h i (+ h (/ j k))) (- l g))) (simprec m (n o (+ o (/ n p))) q))",
+		 ["a", "d", "e", "j", "k", "l", "m", "p", "q"])]
+
+*)
+
 end				
 			      
-
 		       
