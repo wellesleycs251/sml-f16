@@ -17,6 +17,11 @@ val f2c = Intex(1, BinApp(Div,
 				 BinApp(Sub, Arg 1, Int 32),
 				 Int 5),
 			  Int 9))
+val divRem = Intex(5, BinApp(Add,
+			     BinApp(Mul,
+				    BinApp(Div, Arg 1, Arg 2),
+				    Arg 3),
+			     BinApp(Rem, Arg 4, Arg 5)))
 
 exception EvalError of string
 
